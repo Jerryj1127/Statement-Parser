@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import pdfplumber, re, csv
 from abc import ABC, abstractmethod
 from creditcard.config import Config
@@ -192,18 +193,22 @@ class CreditCard(ABC):
 
 
             
-            fields (``list[str]`` *optional*):
-                List of fields to include in the CSV file. 
+            fields (``list[str]``|``"ALL"`` *optional*):
+                List of fields to include in the JSON file.
                 Available fields are: ``DATE``, ``NAME``, ``CATEGORY``, ``AMOUNT``, ``TYPE``, ``CASHBACK``.
                 Default is to include all above fields. 
-                Additonal fields to include (related to card) are :
-                ``CARDNAME``, ``CARDNO``, ``CARDTYPE``, ``BANKNAME``. 
+                Additional fields to include (related to card) are :
+                ``CARDNAME``, ``CARDNO``, ``CARDTYPE``, ``BANKNAME``.
+                Pass "ALL" to include all the above fields
             """
         
         if not filename:
             filename = f"{self.card_name}-{self.card_number}.csv"
         if not filename.lower().endswith(".csv"):
             filename += ".csv"
+
+        if fields == "ALL":
+            fields = ['CARDNAME', 'CARDNO', 'CARDTYPE', 'BANKNAME']
 
         _row = []
         _header = []
@@ -241,6 +246,65 @@ class CreditCard(ABC):
 
 
         
+        return filename
+
+    def to_json(self, filename=None, fields=[], indent=None):
+        """Convert a Card statement's transactions to JSON file
+                returns filename on success.
+
+        Parameters:
+            filename (``str``  *optional*):
+                Filename or path to the JSON file that's to be created.
+                Leave it empty to use the default filename: ``card name - last 4 digits of card.json``.
+                Default path is the present working directory; specify a path with filename to change the directory.
+
+            fields (``list[str]``|``"ALL"`` *optional*):
+                List of fields to include in the JSON file.
+                Available fields are: ``DATE``, ``NAME``, ``CATEGORY``, ``AMOUNT``, ``TYPE``, ``CASHBACK``.
+                Default is to include all above fields. 
+                Additional fields to include (related to card) are :
+                ``CARDNAME``, ``CARDNO``, ``CARDTYPE``, ``BANKNAME``.
+                Pass "ALL" to include all the above fields
+            
+            indent (``int`` *optional*):
+                indentation for the json file.
+        """
+        
+        if not filename:
+            filename = f"{self.card_name}-{self.card_number}.json"
+        if not filename.lower().endswith(".json"):
+            filename += ".json"
+
+        if fields == "ALL":
+            fields = ['CARDNAME', 'CARDNO', 'CARDTYPE', 'BANKNAME']
+
+        data = {}
+        if 'CARDNAME' in fields:
+            data['CARDNAME'] = self.card_name
+            fields.remove('CARDNAME')
+        if 'CARDNO' in fields:
+            data['CARDNO'] = self.card_number
+            fields.remove('CARDNO')
+        if 'CARDTYPE' in fields:
+            data['CARDTYPE'] = self.type
+            fields.remove('CARDTYPE')
+        if 'BANKNAME' in fields:
+            data['BANKNAME'] = self.bank_name
+            fields.remove('BANKNAME')
+        
+        if fields is None or fields == []:
+            fields = Transaction.HEADERS
+
+        transaction_data = []
+        for transaction in self.transactions:
+            transaction_dict = transaction.to_dict()
+            filtered_transaction = {field: transaction_dict[field] for field in fields}
+            transaction_data.append(filtered_transaction)
+        data["TRANSACTIONS"] = transaction_data
+
+        with open(filename, 'w') as jsonfile:
+            json.dump(data, jsonfile, indent=indent)
+
         return filename
 
     def __str__(self):
